@@ -47,28 +47,40 @@ gopath_aspect = aspect(
   attr_aspects = ["deps", "library"],
 )
 
-def _build_gopath_impl(ctx):
-  ctx.file_action(
-    ctx.outputs.executable,
-    "#!/bin/bash\ntree",
-    executable = True
-  )
+def _build_gopath(ctx):
   links = dict()
   for dep in ctx.attr.deps:
     for entry in dep.gopath:
       linked = "src/" + entry.importpath + "/" + entry.file.basename
       links[linked] = entry.file
+  return links
+
+def _gopath_tool_impl(ctx):
+  ctx.file_action(
+    ctx.outputs.executable,
+    """#!/bin/bash
+# tree
+set -eux
+export GOPATH=$(pwd)
+exec {0} "$@"
+""".format(ctx.executable.tool.short_path),
+    executable = True
+  )
+
+  links = _build_gopath(ctx)
   return struct(
     runfiles = ctx.runfiles(
+      files=[ctx.executable.tool],
       symlinks=links,
       collect_data=False,
       collect_default=False),
   )
 
-build_gopath = rule(
-  implementation = _build_gopath_impl,
+gopath_tool = rule(
+  implementation = _gopath_tool_impl,
   attrs = {
     "deps": attr.label_list(aspects = [gopath_aspect]),
+    "tool": attr.label(executable = True, cfg='host'),
   },
-  executable = True,
+  executable=True,
 )
